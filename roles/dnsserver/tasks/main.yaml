@@ -1,0 +1,27 @@
+- name: Install bind9
+  apt:
+    pkg:
+    - bind9
+- name: Create folder
+  file:
+    path: /opt/dns
+    state: directory
+- name: Copy conf files
+  copy:
+    src: "{{ item }}"
+    dest: /etc/bind/
+  with_items:
+    - /opt/ansible_learn/int.demo.wsr
+    - /opt/ansible_learn/192.zone
+- name: Copy conf x2
+  copy:
+    src: "{{item}}"
+    dest: /etc/bind/ 
+  with_items:
+    - /opt/ansible_learn/named.conf.default-zones
+    - /opt/ansible_learn/named.conf.options
+- name: Restart Bind
+  service:
+    name: bind9
+    state: restarted 
+

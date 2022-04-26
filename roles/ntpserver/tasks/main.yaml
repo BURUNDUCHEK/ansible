@@ -1,0 +1,13 @@
+- name: Intsatll NTP
+  apt:
+    pkg:
+      - chrony
+- name: Copy conf file
+  copy:
+    src: /opt/ansible_learn/crony_srv
+    dest: /etc/chrony/chrony.conf 
+    mode: "0666"
+- name: rest
+  service:
+    name: chronyd
+    state: restarted

@@ -1,0 +1,6 @@
+---
+- hosts: routers
+  tasks:
+    - name: Create file
+      remote_user: autouser
+      command: touch ~/testfile

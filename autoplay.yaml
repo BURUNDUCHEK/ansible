@@ -1,0 +1,200 @@
+---
+- hosts: routers
+  tasks: 
+    - name: Install package
+      apt:
+        pkg: 
+          - cowsay
+          - strongswan
+
+- hosts: 192.168.100.254
+  vars_files:
+    - ./vars.yaml 
+  tasks:
+    - name: Check Hostname
+      command: hostname
+      register: hostname_rtr_l
+
+    - name: Set Hostname
+      hostname:
+          name: "{{ router_left }}"
+      when: hostname_rtr_l.stdout != "{{ router_left }}"
+
+    - name: After cgange hostname reboot
+      reboot:
+      when: hostname_rtr_l.stdout != "{{ router_left }}"
+
+    - name: Create nftables
+      template:
+        src: ./nftables_RTR-L.conf
+        dest: /etc/nftables.conf
+          #  notify:
+          #     - restart nft
+    - name: restart this shit
+      service:
+        name: nftables
+        state: restarted
+    - name: Copy GRE script
+      copy:
+        src: ./gre_L.up
+        dest: /etc/gre_L.up
+        mode: "0755"
+    - name: Set change in crontab
+      lineinfile: 
+        path: /etc/crontab
+        line: "@reboot root /etc/gre_R.up"
+        insertafter: EOF
+    - name: Check crontab correct
+      fetch:
+        src: "/etc/crontab"
+        dest: "./crontab_rtr-l"
+    
+    - name: Launch GRE  script 
+      command: /bin/bash /etc/gre_L.up
+      ignore_errors: true
+   
+    - name: Copy ipsec.conf      
+      copy:
+        src: ./ipsecL
+        dest: /etc/ipsec.conf
+        mode: "0644"
+    - name: Copy ipsec.secrets  
+      copy:
+        src: ./ipsec.secrets
+        dest: /etc/ipsec.secrets
+        mode: "0600"
+    - name: Restart strongswan
+      service:
+        name: strongswan-starter
+        enabled: yes
+        state: restarted
+          #  handlers:
+          #    - name: restart nftL
+          #      service:
+          #        name: nftables
+          #        state: restarted
+        
+- hosts: 5.5.5.100
+  vars_files:
+    - ./vars.yaml 
+  tasks:
+    - name: Check Hostname
+      command: hostname
+      register: hostname_rtr_r
+
+    - name: Set Hostname
+      hostname:
+          name: "{{ router_right }}"
+      when: hostname_rtr_r.stdout != "{{ router_right }}"
+
+    - name: After cgange hostname reboot
+      reboot:
+      when: hostname_rtr_r.stdout != "{{ router_right }}"
+
+    - name: Set nftables
+      copy:
+        src: ./nftables_RTR-R.conf
+        dest: /etc/nftables.conf
+        mode: "0755"
+
+    - name: Restart this shit
+      service:
+        name: nftables
+        state: restarted
+    - name: Add file
+      blockinfile:
+        path: /etc/gre_R.up
+        block: |
+          ip tunnel add tun1 mode gre local 5.5.5.100 remote 4.4.4.100 ttl 64
+          ip link set tun1 up
+          ip addr add 10.5.5.2/30 dev tun1
+          ip route add 192.168.100.0/24 via 10.5.5.1
+        state: present
+        create: yes
+    - name: Launch gre
+      command: /bin/bash /etc/gre_R.up
+      ignore_errors: true
+    - name: Configure crontab
+      lineinfile:
+        path: /etc/crontab
+        line: "@reboot root /etc/gre_R.up" 
+        insertafter: EOF   
+     
+    - name: Copy ipsec.conf      
+      copy:
+        src: ./ipsecR
+        dest: /etc/ipsec.conf
+        mode: "0644"
+    - name: Copy ipsec.secrets  
+      copy:
+        src: ./ipsec.secrets
+        dest: /etc/ipsec.secrets
+        mode: "0600"
+    - name: Start strongswan
+      service:
+        name: strongswan-starter
+        enabled: yes
+        state: restarted
+
+- hosts: 192.168.100.100
+  vars_files:
+    - ./vars.yaml
+    - ./secret.yaml
+  tasks:
+
+    - name: Check Hostname
+      command: hostname
+      register: hostname_web_l
+
+    - name: Set Hostname
+      hostname:
+          name: "{{ left_web_server }}"
+      when: hostname_web_l.stdout != "{{ left_web_server }}"
+
+    - name: After change hostname reboot
+      reboot:
+      when: hostname_web_l.stdout != "{{ left_web_server }}"
+
+    - name: Create user with password
+      user:
+        name: "{{username}}"
+        password: "{{password}}"
+        shell: /bin/bash
+- hosts: 172.16.100.100
+  vars_files:
+    - ./vars.yaml
+  tasks:
+    - name: Check hostname
+      command: hostname
+      register: hostname_web_r
+    - name: Set hostname
+      hostname:
+        name: "{{ right_web_server }}"
+      when: hostname_web_r.stdout != "{{ right_web_server }}"
+
+    - name: After cgange hostname reboot
+      reboot:
+      when: hostname_web_r.stdout != "{{ right_web_server }}"
+
+- hosts: localhost
+  roles:
+    - dnsserver
+    - ntpserver
+- hosts: all
+  tasks:
+    - name: inst chrony
+      apt:
+        pkg: 
+          - chrony
+    - name: set tz
+      community.general.timezone:
+        name: Europe/Moscow
+    - name: Set ntp
+      lineinfile:
+        path: /etc/chrony/chrony.conf
+        regexp: "^pool"
+        line: pool 192.168.100.200
+    - name: rest chrory
+      service:
+        name: chrony
+        state: restarted
