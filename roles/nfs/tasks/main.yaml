@@ -1,0 +1,19 @@
+- name: inst nfs
+  apt:
+    pkg:
+      - nfs-common
+      - nfs-server
+- name: create share
+  file:
+    path: /opt/share
+    state: directory
+    mode: "0755"
+- name:
+  lineinfile:
+    path: /etc/exports
+    line: /opt/share *{rw,sync,no_root_squash}
+    insertafter: EOF
+- name: rest nfs
+  service:
+    name: nfs-server
+    state: restarted

@@ -180,6 +180,7 @@
   roles:
     - dnsserver
     - ntpserver
+    - nfs
 - hosts: all
   tasks:
     - name: inst chrony
@@ -198,3 +199,19 @@
       service:
         name: chrony
         state: restarted
+- hosts: webservers
+  tasks:
+    - name: inst nfs
+      apt:
+        pkg:
+          - nfs-common
+    - name: mount nfs
+      lineinfile:
+        path: /etc/fstab
+        line: 192.168.100.200:/opt/share /mnt nfs defaults 0 0
+        insertafter: EOF
+    - name: mount check
+      ansible.posix.mount:
+        path: /mnt
+        state: mounted
+        opts: exec
